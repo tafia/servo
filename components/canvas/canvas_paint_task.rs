@@ -29,29 +29,34 @@ impl<'a> CanvasPaintTask<'a> {
     /// It reads image data from the canvas
     /// canvas_size: The size of the canvas we're reading from
     /// read_rect: The area of the canvas we want to read from
-    fn read_pixels(&self, read_rect: Rect<i32>, canvas_size: Size2D<f64>) -> Vec<u8>{
-        let canvas_size = canvas_size.to_i32();
-        let canvas_rect = Rect::new(Point2D::new(0i32, 0i32), canvas_size);
-        let src_read_rect = canvas_rect.intersection(&read_rect).unwrap_or(Rect::zero());
-
-        let mut image_data = Vec::new();
-        if src_read_rect.is_empty() || canvas_size.width <= 0 && canvas_size.height <= 0 {
-          return image_data;
+    fn read_pixels(&self, read_rect: Rect<i32>, canvas_size: Size2D<f64>) -> Vec<u8> {
+    
+        if canvas_size.width <= 0 || canvas_size.height <= 0 {
+            return Vec::new();
         }
+        
+        let canvas_rect = Rect::new(Point2D::new(0i32, 0i32), canvas_size.to_i32());
+        let src_read_rect = match canvas_rect.intersection(&read_rect) {
+            Some(r) if !r.is_empty() => r,
+            _ => return Vec::new(),
+        };
 
         let data_surface = self.drawtarget.snapshot().get_data_surface();
-        let mut src_data = Vec::new();
-        data_surface.with_data(|element| { src_data = element.to_vec(); });
-        let stride = data_surface.stride();
-
+        let mut image_data = Vec::with_capacity((src_read_rect.size.width * 
+                                                 src_read_rect.size.height * 4) as usize);
+        let stride = data_surface.stride() as usize;
+        
         //start offset of the copyable rectangle
         let mut src = (src_read_rect.origin.y * stride + src_read_rect.origin.x * 4) as usize;
+        
         //copy the data to the destination vector
-        for _ in 0..src_read_rect.size.height {
-            let row = &src_data[src .. src + (4 * src_read_rect.size.width) as usize];
-            image_data.push_all(row);
-            src += stride as usize;
-        }
+        data_surface.with_data(|src_data| {
+            for _ in 0..src_read_rect.size.height {
+                let row = &src_data[src .. src + (4 * src_read_rect.size.width) as usize];
+                image_data.extend_from_slice(row);
+                src += stride;
+            }
+        });
 
         image_data
     }
